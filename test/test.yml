@@ -1,0 +1,126 @@
+version: "3.6"
+services:
+  amqp:
+    image: rabbitmq:3.6.12-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: amqp
+      RABBITMQ_DEFAULT_PASS: amqp
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "node_health_check"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  test-amqp:
+    image: rabbitmq:3.6.12-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: test-amqp
+      RABBITMQ_DEFAULT_PASS: test-amqp
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "node_health_check"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  app-db:
+    image: updater/base-postgis:4559
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+
+  app-redis:
+    image: "redis:3.2.11-alpine"
+
+  infra-wait:
+    image: waisbrot/wait
+    depends_on:
+      - amqp
+      - app-redis
+      - app-db
+    environment:
+      TARGETS: "amqp:5672,app-redis:6379,app-db:5432"
+
+  app:
+    build:
+      context: ../
+    depends_on:
+      - amqp
+      - test-amqp
+      - app-redis
+      - app-db
+    environment:
+      CLUSTER_NAME: local
+      AMQP_URL: amqp://amqp:amqp@amqp/
+      LOG_LEVEL: debug
+      HTTP_PORT: 3000
+      SCHEMA_REGISTRY_URL: http://schema-registry:3000
+      JWT_USER_SECRET: updater9
+      # Only set address_service jwt secret when stubbing calls to the address
+      # service. It must be removed before committing to github, since it's a
+      # secret
+      # ADDRESS_SERVICE_JWT_USER_SECRET:  put staging secret here
+      INSTANCE_ID: "1"
+      TIMEOUT: 1000
+      REDIS_URL: "redis://app-redis"
+      DB_URI: postgres://app@app-db/app?sslmode=disable
+      ADDRESS_SERVICE_URL: "https://address-api.sandbox.updatron.com"
+      VAULT_ADDRESS: http://vault:8200
+      SERVICEABILITY_VAULT_TOKEN: root
+      UPDATER_API_URL: "https://api.staging.updater.com"
+      UPDATER_API_TOKEN: "d3999b5e-ed6e-40ab-8b93-e451f965c2d8"
+      CLOUDINARY_CLOUD_NAME: "updater-staging"
+      VAULT_PROVIDER_CREDENTIALS_PREFIX: "secret/service-provider-credentials/test"
+      LS_SERVICE_NAME: test-app
+      OTEL_EXPORTER_OTLP_SPAN_ENDPOINT: "http://172.17.0.1:8360/api/v2/otel/trace"
+      OTEL_EXPORTER_OTLP_SPAN_INSECURE: 1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:7777/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # do not run jobber for tests, as we run the processor manually
+  # this is here for true development/local QA purposes
+  # jobber:
+  #   build:
+  #     context: ../
+  #   depends_on:
+  #     - amqp
+  #     - test-amqp
+  #     - schema-registry
+  #     - app-redis
+  #     - app-db
+  #   environment:
+  #     CLUSTER_NAME: local
+  #     AMQP_URL: amqp://amqp:amqp@amqp/
+  #     LOG_LEVEL: debug
+  #     HTTP_PORT: 4000
+  #     SCHEMA_REGISTRY_URL: http://schema-registry:3000
+  #     JWT_USER_SECRET: updater9
+  #     # Only set address_service jwt secret when stubbing calls to the address
+  #     # service. It must be removed before committing to github, since it's a
+  #     # secret
+  #     # ADDRESS_SERVICE_JWT_USER_SECRET:  put staging secret here
+  #     INSTANCE_ID: "1"
+  #     TIMEOUT: 1000
+  #     REDIS_URL: 'redis://app-redis'
+  #     DB_URI: postgres://app@app-db/app?sslmode=disable
+  #     ADDRESS_SERVICE_URL: 'https://address-api.sandbox.updatron.com'
+  #     VAULT_ADDRESS: http://vault:8200
+  #     SERVICEABILITY_VAULT_TOKEN: root
+  #     UPDATER_API_URL: 'https://api.staging.updater.com'
+  #     UPDATER_API_TOKEN: 'd3999b5e-ed6e-40ab-8b93-e451f965c2d8'
+  #     CLOUDINARY_CLOUD_NAME: 'updater-staging'
+  #     VAULT_PROVIDER_CREDENTIALS_PREFIX: 'secret/service-provider-credentials/test'
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--spider", "http://localhost:7777/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
+  service-wait:
+    image: waisbrot/wait
+    depends_on:
+      - app
+    environment:
+      - TARGETS=app:3000,schema-registry:3000

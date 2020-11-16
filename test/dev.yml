@@ -1,0 +1,40 @@
+version: "3.6"
+services:
+  amqp:
+    ports:
+      - 15672:15672
+
+  test-amqp:
+    ports:
+      - 15673:15672
+
+  app-db:
+    ports:
+      - 5432:5432
+
+  app-redis:
+    ports:
+      - 6379:6379
+
+  app:
+    ports:
+      - 3000:3000
+    volumes:
+      - ../src:/app/src/
+      - ../migrations:/app/migrations
+      - ../package.json:/app/package.json
+    command:
+      - yarn
+      - "dev:start"
+
+  # do not run jobber for tests, as we run the processor manually
+  # this is here for true development/local QA purposes
+  # jobber:
+  #   volumes:
+  #     - ../src:/app/src/
+  #     - ../migrations/:/app/migrations/
+  #   command:
+  #     - yarn
+  #     - "dev:start-processor"
+
+
