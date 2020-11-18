@@ -5,9 +5,12 @@ const {
 const {
   GraphQLInstrumentation
 } = require('@opentelemetry/instrumentation-graphql')
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
 
 module.exports = (async () => {
   const sdk = lightstep.configureOpenTelemetry({
+    contextManager: new AsyncLocalStorageContextManager(),
+    accessToken: '',
     logLevel: 'debug',
     serviceName: 'test-app'
   })
